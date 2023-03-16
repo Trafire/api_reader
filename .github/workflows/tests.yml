@@ -89,10 +89,12 @@ jobs:
           key: ${{ steps.pre-commit-cache.outputs.result }}-${{ hashFiles('.pre-commit-config.yaml') }}
           restore-keys: |
             ${{ steps.pre-commit-cache.outputs.result }}-
+            
+      - name: Print Python Version
+        run: python --version
 
       - name: Run Nox
-        run: |
-          nox --python {{ matrix.python-version }}.
+        run: nox --python {{ matrix.python-version }}.
 
       - name: Upload coverage data
         if: always() && matrix.session == 'tests'
