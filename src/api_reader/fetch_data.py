@@ -1,8 +1,14 @@
 import abc
+import asyncio
+import concurrent.futures
+import math
+import sys
 import types
 from importlib.machinery import SourceFileLoader
-from typing import Tuple, Generator
+from typing import Generator
+from typing import Tuple
 
+import aiohttp
 import pydantic
 import requests
 
@@ -48,9 +54,11 @@ class FetchData(abc.ABC):
         status_code, resp = self.fetch_data()
         while True:
             if status_code == 200:
-                yield from resp.get(self.results_key, [resp])
                 if self.is_instance:
+                    yield resp
                     break
+                yield from resp.get(self.results_key, [resp])
+
                 status_code, resp = self.next_page()
             else:
                 break
@@ -71,7 +79,9 @@ class FetchData(abc.ABC):
 
 
 class GenericCreateModel(FetchData):
-    def __init__(self, url, results_key, params=None, folder_path="models", name_model=None):
+    def __init__(
+            self, url, results_key, params=None, folder_path="models", name_model=None
+    ):
         assert isinstance(name_model, str)
         self.folder_path = folder_path
         if params is None:
@@ -98,7 +108,7 @@ class UnPaginatedMixin:
         return 404, {}
 
 
-class FetchMeals(UnPaginatedMixin, FetchData):
+class GenericUnpaginated(UnPaginatedMixin, FetchData):
     def __init__(self, url, params, *args, **kwargs):
         results_key = "meals"
         super().__init__(url, results_key, params, *args, **kwargs)
@@ -110,13 +120,13 @@ class FetchMeals(UnPaginatedMixin, FetchData):
 
 
 class FetchDRF(FetchData, abc.ABC):
-
     @property
     def name_model(self):
         if self._name_model is None:
             self._name_model = requests.options(self.url).json()["name"]
         return self._name_model
 
+    @property
     def is_instance(self) -> bool:
         return self.name_model.endswith("Instance")
 
@@ -124,8 +134,8 @@ class FetchDRF(FetchData, abc.ABC):
 class FetchDRFPaginated(FetchDRF):
     def __init__(self, url, params, *args, **kwargs):
         results_key = "results"
-        if 'results_key' in kwargs:
-            del kwargs['results_key']
+        if "results_key" in kwargs:
+            del kwargs["results_key"]
         super().__init__(url, results_key, params, *args, **kwargs)
 
     def next_url(self):
@@ -139,11 +149,95 @@ class FetchDRFPaginated(FetchDRF):
         # fetch data
         return self.fetch_data()
 
+    @property
+    def total_num_pages(self):
+        return math.ceil(self.fetch_data()[1]["count"] / 10)
 
-if __name__ == "__main__":
-    # url = "https://www.themealdb.com/api/json/v1/1/search.php"
-    url = "https://c18c9qanx7.execute-api.ca-central-1.amazonaws.com/master/category/"
-    params = {"page": 1}
-    c = FetchDRFPaginated(url, params=params)
-    for i in c.process():
-        print(i)
+    async def async_process_data_unit(self, data_unit):
+        return self.datacls(**data_unit)
+
+    async def async_fetch_data(self, params) -> Tuple[int, dict]:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(self.url, params=params) as resp:
+                return resp.status, await resp.json()
+
+    async def async_get_data_units(self):
+        urls = [{"page": page_num} for page_num in range(1, self.total_num_pages + 1)]
+        tasks = [asyncio.create_task(self.async_fetch_data(url)) for url in urls]
+        results = await asyncio.gather(*tasks)
+        for status, resp in results:
+            data_units = resp.get(self.results_key, [resp])
+            for row in (self.async_process_data_unit(data) for data in data_units):
+                yield await row
+
+    #     status_code, resp = self.fetch_data()
+    #     tasks = []
+    #     while True:
+
+    # while True:
+    #     if status_code == 200:
+    #         data_units = resp.get(self.results_key, [resp])
+    #         tasks.extend([asyncio.create_task(self.async_process_data_unit(data)) for data in data_units])
+    #         if self.is_instance:
+    #             break
+    #         status_code, resp = self.next_page()
+    #     else:
+    #         break
+    #     if self.is_instance:
+    #         break
+    # data = await asyncio.gather(*tasks)
+    # for d in data:
+    #     yield d
+
+    async def async_process(self):
+        async for data in self.async_get_data_units():
+            yield data
+
+
+class BuilderJson(FetchDRF):
+    def next_page(self):
+        pass
+
+    def next_url(self):
+        pass
+
+    def __init__(self, url, params, *args, **kwargs):
+        super().__init__(url, None, params, *args, **kwargs)
+
+    @property
+    def name_model(self):
+        return "BuilderJson"
+
+    def get_data_units(self) -> Generator:
+        status_code, resp = self.fetch_data()
+
+        if status_code == 200:
+            to_process = [resp]
+            processed = []
+            while to_process:
+                data = to_process.pop()
+                if isinstance(data, list):
+                    nodes = data
+                else:
+                    nodes = [data]
+                for node in nodes:
+                    if node not in processed:
+                        if "values" in node:
+                            for r in node["values"]:
+                                to_process.append(r)
+
+                        if "children" in node:
+                            for r in node["children"]:
+                                to_process.append(r)
+                        print(node)
+                        yield node
+
+                # yield row
+                # if "values" in row:
+                #     for r in row['values']:
+                #         print(123, r)
+                #         yield r
+                # if "children" in row:
+                #     for r in row['children']:
+                #         print(123, r)
+                #         yield r

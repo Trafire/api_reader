@@ -27,7 +27,7 @@ def convert_to_snake_case(text):
 
 
 def generate_model(model_name, data, folder="models/"):
-    filename = os.path.join(folder,f"{convert_to_snake_case(model_name)}.py")
+    filename = os.path.join(folder, f"{convert_to_snake_case(model_name)}.py")
     path = Path(filename)
     path.parents[0].mkdir(parents=True, exist_ok=True)
     class_name = convert_to_class_capitalization(model_name)
