@@ -8,7 +8,6 @@ from textwrap import dedent
 
 import nox
 
-
 try:
     from nox_poetry import Session
     from nox_poetry import session
@@ -21,9 +20,8 @@ except ImportError:
     {sys.executable} -m pip install nox-poetry"""
     raise SystemExit(dedent(message)) from None
 
-
 package = "api_reader"
-python_versions = ["3.11.2", "3.11","3.10", "3.9", "3.8"]
+python_versions = ["3.11.2", "3.11", "3.10", "3.9", "3.8"]
 nox.needs_version = ">= 2021.6.6"
 nox.options.sessions = (
     "pre-commit",
@@ -96,8 +94,8 @@ def activate_virtualenv_in_precommit_hooks(session: Session) -> None:
         text = hook.read_text()
 
         if not any(
-            Path("A") == Path("a") and bindir.lower() in text.lower() or bindir in text
-            for bindir in bindirs
+                Path("A") == Path("a") and bindir.lower() in text.lower() or bindir in text
+                for bindir in bindirs
         ):
             continue
 
@@ -162,6 +160,7 @@ def tests(session: Session) -> None:
     """Run the test suite."""
     session.install(".")
     session.install("coverage[toml]", "pytest", "pygments")
+
     try:
         session.run("coverage", "run", "--parallel", "-m", "pytest", *session.posargs)
     finally:

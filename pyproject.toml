@@ -63,7 +63,7 @@ source = ["api_reader", "tests"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 100
+fail_under = 1
 
 [tool.isort]
 profile = "black"

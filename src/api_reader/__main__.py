@@ -40,6 +40,10 @@ def create_models(url, params, rk, folder):
         url=url, params=json.loads(params), results_key=rk, folder=folder
     )
     FetchDRFPaginated(api_data.url, api_data.params, results_key=rk, folder_path=folder)
+    
+    
+def main():
+    pass
 
 
 if __name__ == "__main__":
